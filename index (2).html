@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pegue as Moedas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #13233A;
+    --ink: #1B2A41;
+    --card: #F4F8FF;
+    --card-edge: #1B2A41;
+    --muted: #4B5D78;
+    --gold: #FFC400;
+    --gold-dark: #C99700;
+    --green: #34B36B;
+    --amber: #F5A623;
+    --red: #E5383B;
+    --pill: rgba(255, 255, 255, .92);
+    --pill-ink: #1B2A41;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0A1322; --card: #1E2D47; --card-edge: #F2F6FF; --ink: #F2F6FF; --muted: #A9B8D1;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0A1322; --card: #1E2D47; --card-edge: #F2F6FF; --ink: #F2F6FF; --muted: #A9B8D1;
+  }
+
+  [hidden] { display: none !important; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+  }
+  .wrap {
+    min-height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 10px;
+  }
+
+  /* ---------- Palco (16:9) ---------- */
+  .stage {
+    position: relative;
+    width: min(100%, calc((100vh - 70px) * 16 / 9));
+    width: min(100%, calc((100dvh - 70px) * 16 / 9));
+    aspect-ratio: 16 / 9;
+    container-type: inline-size;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #8FD3F0;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .45);
+  }
+  #canvasHost, #canvasHost canvas { width: 100% !important; height: 100% !important; display: block; }
+
+  .hud, .screen { font-size: 1.667cqw; }
+
+  /* ---------- HUD ---------- */
+  .hud {
+    position: absolute; left: 0; right: 0; top: 0;
+    padding: 1.1em 1em 0;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: .8em;
+    pointer-events: none;
+  }
+  .timebar {
+    position: absolute; left: 0; top: 0; height: .5em; width: 100%;
+    background: var(--green); transform-origin: left center;
+    transition: background-color .25s;
+  }
+  .timebar.warn { background: var(--amber); }
+  .timebar.danger { background: var(--red); }
+  .pill {
+    background: var(--pill); color: var(--pill-ink);
+    border: .16em solid var(--ink);
+    border-radius: .8em;
+    padding: .35em .8em;
+    font-weight: 700; font-size: 1.15em;
+    white-space: nowrap;
+    box-shadow: 0 .2em 0 rgba(27, 42, 65, .35);
+  }
+  .pill.time { font-family: 'Bricolage Grotesque', 'Figtree', sans-serif; font-weight: 800; font-size: 1.7em; padding: .15em .7em; min-width: 5.2em; text-align: center; }
+  .pill.time.warn { background: #FFE3A3; }
+  .pill.time.danger { background: #FFB3B5; animation: pulse .5s ease-in-out infinite alternate; }
+  @keyframes pulse { to { transform: scale(1.06); } }
+  .hud .group { display: flex; flex-direction: column; align-items: flex-end; gap: .35em; }
+  .hud .group.left { align-items: flex-start; }
+  .dots { display: inline-flex; gap: .25em; margin-left: .5em; vertical-align: middle; }
+  .dot { width: .95em; height: .95em; border-radius: 50%; border: .13em solid #8A6A00; background: rgba(27, 42, 65, .12); display: inline-block; }
+  .dot.on { background: radial-gradient(circle at 35% 30%, #FFE680, var(--gold)); }
+  .worth { font-size: .95em; font-weight: 700; color: #fff; background: rgba(19, 35, 58, .72); border-radius: .6em; padding: .2em .7em; }
+  .hud .center { display: flex; flex-direction: column; align-items: center; gap: .35em; }
+
+  /* ---------- Telas ---------- */
+  .screen {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(14, 30, 52, .55);
+    backdrop-filter: blur(2px);
+  }
+  .card {
+    width: 27em; max-width: 92%;
+    background: var(--card); color: var(--ink);
+    border: .2em solid var(--card-edge);
+    border-radius: 1.2em;
+    padding: 1.6em 1.8em 1.7em;
+    text-align: center;
+    box-shadow: .5em .5em 0 rgba(0, 0, 0, .35);
+  }
+  h1, h2 {
+    font-family: 'Bricolage Grotesque', 'Figtree', sans-serif;
+    font-weight: 800; margin: 0; line-height: .95; letter-spacing: -.01em;
+  }
+  h1 { font-size: 3.5em; margin: .35em 0 .3em; }
+  h2 { font-size: 2.3em; margin-bottom: .3em; }
+  .sub { margin: 0 0 1em; color: var(--muted); font-size: 1.1em; line-height: 1.35; font-weight: 500; }
+  .btn {
+    font-family: 'Bricolage Grotesque', 'Figtree', sans-serif; font-weight: 800;
+    font-size: 1.5em; letter-spacing: .02em;
+    background: var(--gold); color: #1B2A41;
+    border: .12em solid #1B2A41; border-radius: .7em;
+    padding: .5em 1.6em;
+    box-shadow: 0 .25em 0 var(--gold-dark);
+    cursor: pointer; margin-top: .6em;
+    transition: transform .08s, box-shadow .08s;
+  }
+  .btn:hover { filter: brightness(1.05); }
+  .btn:active { transform: translateY(.2em); box-shadow: 0 .05em 0 var(--gold-dark); }
+  .btn:focus-visible, .mini:focus-visible, .tbtn:focus-visible { outline: .2em solid #3B82F6; outline-offset: .2em; }
+  .btn.ghost { background: transparent; color: var(--ink); border-color: var(--card-edge); box-shadow: none; font-size: 1.15em; }
+
+  /* moedas giratórias da tela inicial */
+  .coins-row { display: flex; justify-content: center; gap: .8em; perspective: 40em; }
+  .coin {
+    width: 2.4em; height: 2.4em; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #FFE680, var(--gold) 55%, var(--gold-dark));
+    border: .16em solid #8A6A00;
+    animation: spin 2.4s linear infinite;
+  }
+  .coin:nth-child(2) { animation-delay: -.8s; }
+  .coin:nth-child(3) { animation-delay: -1.6s; }
+  @keyframes spin { to { transform: rotateY(360deg); } }
+
+  /* teclas */
+  .keys { display: grid; grid-template-columns: repeat(3, 2.6em); grid-template-rows: repeat(2, 2.6em); gap: .35em; justify-content: center; margin: .5em auto .6em; }
+  kbd {
+    font-family: 'Bricolage Grotesque', 'Figtree', sans-serif; font-weight: 800; font-size: 1.2em;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: #fff; color: #1B2A41;
+    border: .12em solid #1B2A41; border-radius: .45em;
+    box-shadow: 0 .2em 0 #1B2A41;
+  }
+  .keys .kw { grid-column: 2; grid-row: 1; }
+  .keys .ka { grid-column: 1; grid-row: 2; }
+  .keys .ks { grid-column: 2; grid-row: 2; }
+  .keys .kd { grid-column: 3; grid-row: 2; }
+  .wasd { font-weight: 800; font-size: 1.2em; margin: 0 0 .15em; font-family: 'Bricolage Grotesque', 'Figtree', sans-serif; }
+  .tiny { font-size: .95em; color: var(--muted); margin: 0; line-height: 1.35; }
+
+  /* estatísticas */
+  .stats { margin: .4em 0 .6em; text-align: left; }
+  .stats > div { display: flex; justify-content: space-between; gap: 1em; padding: .35em 0; border-bottom: .08em solid rgba(127, 140, 160, .35); font-size: 1.15em; }
+  .stats dt { color: var(--muted); font-weight: 500; }
+  .stats dd { margin: 0; font-weight: 800; font-family: 'Bricolage Grotesque', 'Figtree', sans-serif; }
+  .stats .big dd { font-size: 1.9em; line-height: 1; color: var(--green); }
+  .stats .bad dd { color: var(--red); }
+  .meter { height: .8em; border-radius: 1em; background: rgba(127, 140, 160, .3); overflow: hidden; margin: .5em 0 .5em; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--gold); border-radius: 1em; transition: width .8s cubic-bezier(.2, .8, .2, 1); }
+  .note { margin: 0; color: var(--muted); font-size: 1em; }
+
+  /* barra inferior */
+  .bar { width: min(100%, calc((100vh - 70px) * 16 / 9)); width: min(100%, calc((100dvh - 70px) * 16 / 9)); display: flex; justify-content: space-between; align-items: center; gap: 1em; color: #A9B8D1; font-size: 14px; }
+  .mini { background: transparent; color: inherit; border: 1.5px solid #A9B8D1; border-radius: 8px; padding: 4px 10px; font: inherit; cursor: pointer; }
+  .mini:hover { color: #fff; border-color: #fff; }
+
+  /* controles de toque */
+  .touch { display: none; width: 100%; max-width: 960px; justify-content: space-between; gap: 12px; }
+  .touch .pair { display: flex; gap: 12px; }
+  .tbtn {
+    width: 64px; height: 56px; border-radius: 14px; border: 2px solid #A9B8D1; background: rgba(255, 255, 255, .12); color: #fff;
+    font-size: 24px; font-weight: 800; touch-action: none;
+  }
+  .tbtn:active { background: rgba(255, 196, 0, .5); }
+  @media (pointer: coarse) { .touch { display: flex; } .bar .keyhint { display: none; } }
+  .rotate { display: none; color: #A9B8D1; font-size: 14px; text-align: center; }
+  @media (orientation: portrait) and (max-width: 700px) { .rotate { display: block; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .coin, .pill.time.danger { animation: none; }
+    .meter i { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="stage" id="stage">
+    <div id="canvasHost" aria-label="Área do jogo"></div>
+
+    <!-- HUD durante a fase -->
+    <div class="timebar" id="timebar" hidden></div>
+    <div class="hud" id="hud" hidden>
+      <div class="group left">
+        <div class="pill" id="hudLevel">Fase 1</div>
+      </div>
+      <div class="center">
+        <div class="pill time" id="hudTime">Tempo: 30s</div>
+      </div>
+      <div class="group">
+        <div class="pill" id="hudCoinsPill"><span id="hudCoins">Moedas: 0/3</span><span class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></span></div>
+        <div class="pill" id="hudScore">Pontuação: 0</div>
+        <div class="worth" id="hudWorth">Esta fase vale 30 pts</div>
+      </div>
+    </div>
+
+    <!-- Tela de início -->
+    <section class="screen" id="screen-start">
+      <div class="card">
+        <div class="coins-row" aria-hidden="true"><i class="coin"></i><i class="coin"></i><i class="coin"></i></div>
+        <h1>PEGUE AS MOEDAS</h1>
+        <p class="sub">Pule entre as plataformas e pegue 3 moedas em cada fase antes que os 30 segundos acabem.</p>
+        <button class="btn" id="btnPlay">JOGAR</button>
+        <div class="keys" aria-hidden="true"><kbd class="kw">W</kbd><kbd class="ka">A</kbd><kbd class="ks">S</kbd><kbd class="kd">D</kbd></div>
+        <p class="wasd">WASD para movimentar</p>
+        <p class="tiny">W pula, S abaixa (e desce mais rápido no ar), A e D andam. Também funcionam as setas e a barra de espaço.</p>
+      </div>
+    </section>
+
+    <!-- Tela de vitória -->
+    <section class="screen" id="screen-win" hidden>
+      <div class="card">
+        <h2>FASE CONCLUÍDA!</h2>
+        <p class="sub" id="winLevelName"></p>
+        <dl class="stats">
+          <div><dt>Tempo restante</dt><dd id="winTime">0s</dd></div>
+          <div><dt>Moedas coletadas</dt><dd id="winCoins">3/3</dd></div>
+          <div class="big"><dt>Pontuação obtida</dt><dd id="winScore">0</dd></div>
+          <div><dt>Pontuação máxima</dt><dd>30</dd></div>
+        </dl>
+        <div class="meter"><i id="winMeter"></i></div>
+        <p class="note" id="winNote"></p>
+        <button class="btn" id="btnNext">PRÓXIMA FASE</button>
+      </div>
+    </section>
+
+    <!-- Tela de derrota -->
+    <section class="screen" id="screen-lose" hidden>
+      <div class="card">
+        <h2>TEMPO ESGOTADO!</h2>
+        <p class="sub" id="loseHint">Você não pegou as 3 moedas a tempo.</p>
+        <dl class="stats">
+          <div><dt>Moedas coletadas</dt><dd id="loseCoins">0/3</dd></div>
+          <div class="big bad"><dt>Pontuação</dt><dd>0</dd></div>
+        </dl>
+        <button class="btn" id="btnRetry">TENTAR NOVAMENTE</button>
+      </div>
+    </section>
+
+    <!-- Tela final -->
+    <section class="screen" id="screen-final" hidden>
+      <div class="card">
+        <h2>JOGO COMPLETO!</h2>
+        <p class="sub">Você terminou as 3 fases.</p>
+        <dl class="stats" id="finalStats"></dl>
+        <button class="btn" id="btnAgain">JOGAR DE NOVO</button>
+      </div>
+    </section>
+
+    <!-- Pausa -->
+    <section class="screen" id="screen-pause" hidden>
+      <div class="card">
+        <h2>PAUSADO</h2>
+        <p class="sub">O tempo está parado.</p>
+        <button class="btn" id="btnResume">CONTINUAR</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="bar">
+    <span class="keyhint">P pausa &nbsp;·&nbsp; R reinicia a fase</span>
+    <button class="mini" id="btnMute" type="button">Som: ligado</button>
+  </div>
+
+  <div class="touch" id="touch">
+    <div class="pair"><button class="tbtn" data-k="left" aria-label="Esquerda">◀</button><button class="tbtn" data-k="right" aria-label="Direita">▶</button></div>
+    <div class="pair"><button class="tbtn" data-k="down" aria-label="Abaixar">▼</button><button class="tbtn" data-k="jump" aria-label="Pular">▲</button></div>
+  </div>
+  <div class="rotate">Gire o celular para o modo horizontal para jogar melhor.</div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* =====================================================================
+   CONFIGURAÇÕES GERAIS
+   ===================================================================== */
+const VW = 960, VH = 540;            // tamanho "lógico" da tela do jogo
+const TAU = Math.PI * 2;
+const TOTAL_TIME = 30;               // segundos por fase
+const MAX_SCORE = 30;                // pontuação máxima por fase
+const DEATH_PENALTY = 2;             // segundos perdidos ao cair/espetar
+
+const PHYS = {
+  gravity: 2300,        // px/s²
+  fallMul: 1.2,         // queda um pouco mais rápida = pulo mais "firme"
+  cutMul: 2.4,          // soltar o W corta o pulo (pulo variável)
+  maxFall: 1300,
+  run: 300,             // velocidade máxima andando
+  crouchRun: 170,       // velocidade abaixado
+  groundAcc: 3200,
+  groundFric: 3600,
+  airAcc: 2000,
+  airFric: 900,
+  jump: -830,           // altura de pulo ≈ 150px
+  spring: -1150,        // mola ≈ 287px
+  coyote: 0.10,         // tolerância para pular logo após sair da borda
+  buffer: 0.12          // tolerância para apertar W um pouco antes de pousar
+};
+const PLAYER = { w: 28, h: 40, hCrouch: 24 };
+
+/* =====================================================================
+   8. SISTEMA DE FASES  (dados das 3 fases)
+   - "par" = segundos de fase com os quais ainda se ganha 30 pontos
+   - Plataformas: solid | crumble (esfarela) | mover (se move)
+   ===================================================================== */
+const GROUND = (x, y, w) => ({ type: 'solid', x, y, w, h: VH + 200 - y });
+const SOLID  = (x, y, w, h = 24, extra = {}) => ({ type: 'solid', x, y, w, h, ...extra });
+const CRUMBLE = (x, y, w) => ({ type: 'crumble', x, y, w, h: 20 });
+const MOVER  = (x, y, w, x2, y2, period) => ({ type: 'mover', x, y, w, h: 20, ax: x, ay: y, bx: x2, by: y2, period });
+
+const THEMES = {
+  dia:   { skyTop: '#8FD3F0', skyBot: '#EAF7F0', hill1: '#BFE5D2', hill2: '#93D0B5', cloud: '#FFFFFF', grass: '#5FCB84', body: '#2A4365', bodyDark: '#223756', orb: 'rgba(255,244,190,.95)', stars: false, ink: '#1B2A41' },
+  tarde: { skyTop: '#6C7FD8', skyBot: '#FFD3A8', hill1: '#E9A7B8', hill2: '#C77FA6', cloud: '#FFE9D6', grass: '#8EDB6B', body: '#3A2F5B', bodyDark: '#2F2650', orb: 'rgba(255,226,170,.95)', stars: false, ink: '#1B2A41' },
+  noite: { skyTop: '#141B3D', skyBot: '#5B3A86', hill1: '#3A3278', hill2: '#2A2560', cloud: '#6E5BA8', grass: '#5EE6C8', body: '#2D3A6B', bodyDark: '#243059', orb: 'rgba(240,244,255,.95)', stars: true, ink: '#E8ECFF' }
+};
+
+const LEVELS = [
+  {
+    name: 'Primeiros passos', par: 14, width: 2200, theme: THEMES.dia,
+    start: { x: 80, y: 460 },
+    platforms: [
+      GROUND(0, 460, 520),
+      GROUND(640, 460, 300),
+      SOLID(720, 360, 120),            // plataforma da moeda 1
+      SOLID(1060, 400, 200),
+      SOLID(1320, 340, 160),           // plataforma da moeda 2
+      SOLID(1560, 400, 140),
+      GROUND(1780, 460, 420),
+      SOLID(1900, 360, 120)            // plataforma da moeda 3
+    ],
+    coins: [{ x: 780, y: 322 }, { x: 1400, y: 292 }, { x: 1960, y: 322 }],
+    spikes: [{ x: 870, y: 460, w: 40 }],
+    springs: [],
+    checkpoints: [{ x: 680, y: 460 }, { x: 1810, y: 460 }],
+    signs: [{ x: 140, y: 400, text: 'A / D andam  ·  W pula' }, { x: 860, y: 420, text: 'Cuidado!' }]
+  },
+  {
+    name: 'Plataformas que caem', par: 18, width: 2800, theme: THEMES.tarde,
+    start: { x: 80, y: 470 },
+    platforms: [
+      GROUND(0, 470, 400),
+      CRUMBLE(520, 430, 100), CRUMBLE(680, 400, 100), CRUMBLE(840, 370, 100),
+      SOLID(1040, 400, 160),
+      SOLID(1240, 340, 60, 20),         // caminho seguro (escadinha)
+      SOLID(1330, 250, 160),            // plataforma da moeda 2
+      MOVER(1560, 340, 100, 1760, 340, 4.5),
+      SOLID(1930, 400, 200),
+      SOLID(2200, 360, 70, 20),
+      SOLID(2330, 320, 70, 20),         // plataforma da moeda 3
+      SOLID(2460, 380, 70, 20),
+      GROUND(2600, 470, 200)
+    ],
+    coins: [{ x: 890, y: 322 }, { x: 1410, y: 210 }, { x: 2365, y: 280 }],
+    spikes: [{ x: 300, y: 470, w: 30 }, { x: 2020, y: 400, w: 40 }],
+    springs: [{ x: 1130, y: 400, w: 40 }],
+    checkpoints: [{ x: 1060, y: 400 }, { x: 1950, y: 400 }],
+    signs: [{ x: 500, y: 380, text: 'Ela cai se você demorar!' }, { x: 1150, y: 345, text: 'Mola ou escada' }]
+  },
+  {
+    name: 'Precisão e velocidade', par: 24, width: 3000, theme: THEMES.noite,
+    start: { x: 80, y: 470 },
+    platforms: [
+      GROUND(0, 470, 360),
+      SOLID(480, 420, 60, 20), SOLID(600, 370, 60, 20), SOLID(720, 320, 60, 20),   // moeda 1 no topo
+      SOLID(860, 380, 200),
+      GROUND(1110, 470, 430),
+      SOLID(1210, 400, 200, 40, { low: true }),   // teto baixo: segure S
+      MOVER(1640, 470, 90, 1640, 220, 4),         // elevador
+      SOLID(1810, 220, 120),
+      CRUMBLE(2010, 250, 80), CRUMBLE(2150, 290, 80), CRUMBLE(2290, 330, 80),
+      MOVER(2450, 380, 90, 2650, 380, 3.6),
+      SOLID(2800, 330, 200)
+    ],
+    coins: [{ x: 750, y: 280 }, { x: 1310, y: 455 }, { x: 2930, y: 290 }],
+    spikes: [{ x: 260, y: 470, w: 30 }, { x: 980, y: 380, w: 40 }, { x: 2860, y: 330, w: 30 }],
+    springs: [],
+    checkpoints: [{ x: 880, y: 380 }, { x: 1830, y: 220 }],
+    signs: [{ x: 1150, y: 430, text: 'Segure S' }, { x: 1560, y: 420, text: 'Espere o elevador' }]
+  }
+];
+
+/* =====================================================================
+   ESTADO DO JOGO
+   ===================================================================== */
+let P;                         // instância do p5
+let state = 'menu';            // menu | ready | playing | won | won-ui | lost | lost-ui | final
+let paused = false;
+let levelIndex = 0, level = LEVELS[0], theme = LEVELS[0].theme;
+let plats = [], spikes = [], springs = [], cps = [], coins = [];
+let pl;                        // jogador
+let camX = 0, clock = 0;
+let timeLeft = TOTAL_TIME, coinsGot = 0, lastScore = 0;
+let levelScores = [null, null, null];
+let lastCp = { x: 80, y: 460 };
+let readyT = 0, endT = 0, dustT = 0;
+let particles = [], popups = [];
+
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ov = (a, b, e = 0.01) => a.x < b.x + b.w - e && a.x + a.w > b.x + e && a.y < b.y + b.h - e && a.y + a.h > b.y + e;
+
+/* =====================================================================
+   SONS (WebAudio simples, sem arquivos externos)
+   ===================================================================== */
+let audioCtx = null, muted = false;
+function beep(freq, dur, type = 'square', vol = 0.05, slide = 0, delay = 0) {
+  if (muted) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const t = audioCtx.currentTime + delay;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + dur);
+  } catch (e) { /* sem áudio: segue o jogo */ }
+}
+const sfx = {
+  jump:  () => beep(330, .14, 'square', .04, 2),
+  coin:  () => { beep(880, .09, 'triangle', .08); beep(1320, .16, 'triangle', .08, 1, .07); },
+  hurt:  () => beep(260, .3, 'sawtooth', .06, .3),
+  spring:() => beep(300, .25, 'sine', .08, 3),
+  check: () => { beep(660, .1, 'triangle', .06); beep(990, .14, 'triangle', .06, 1, .08); },
+  win:   () => [523, 659, 784, 1047].forEach((f, i) => beep(f, .22, 'triangle', .08, 1, i * .11)),
+  lose:  () => [392, 330, 262, 196].forEach((f, i) => beep(f, .28, 'sawtooth', .05, 1, i * .14)),
+  start: () => { beep(440, .1, 'triangle', .06); beep(660, .16, 'triangle', .06, 1, .1); }
+};
+
+/* =====================================================================
+   4. CONTROLES  (WASD + setas + espaço + botões de toque)
+   ===================================================================== */
+const keys = { left: false, right: false, down: false, jump: false };
+const KEYMAP = { KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', KeyS: 'down', ArrowDown: 'down', KeyW: 'jump', ArrowUp: 'jump', Space: 'jump' };
+const inGame = () => state === 'playing' || state === 'ready';
+
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (k) {
+    // Espaço só vira "pulo" durante a fase (nas telas ele ativa os botões)
+    if (e.code === 'Space' && !inGame()) return;
+    if (inGame()) e.preventDefault();
+    if (k === 'jump' && !keys.jump && state === 'playing' && !paused) pl.buffer = PHYS.buffer;
+    keys[k] = true;
+  } else if (e.code === 'KeyP' || e.code === 'Escape') {
+    if (inGame()) togglePause();
+  } else if (e.code === 'KeyR') {
+    if (inGame() && !paused) startLevel();
+  } else if (e.code === 'KeyM') {
+    toggleMute();
+  }
+});
+window.addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'playing' && !paused) togglePause(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'playing' && !paused) togglePause(); });
+
+// botões de toque
+document.querySelectorAll('.tbtn').forEach(b => {
+  const k = b.dataset.k;
+  const on = e => { e.preventDefault(); if (k === 'jump' && !keys.jump && state === 'playing' && !paused) pl.buffer = PHYS.buffer; keys[k] = true; };
+  const off = e => { e.preventDefault(); keys[k] = false; };
+  b.addEventListener('pointerdown', on);
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => b.addEventListener(ev, off));
+});
+
+function toggleMute() { muted = !muted; $('btnMute').textContent = muted ? 'Som: desligado' : 'Som: ligado'; }
+function togglePause() {
+  paused = !paused;
+  if (paused) { showScreen('pause'); $('btnResume').focus({ preventScroll: true }); }
+  else { showScreen(null); }
+}
+
+/* =====================================================================
+   1. CRIAÇÃO DO JOGADOR
+   ===================================================================== */
+function createPlayer(x, y) {
+  const p = {
+    x, y: y - PLAYER.h, w: PLAYER.w, h: PLAYER.h,
+    vx: 0, vy: 0,
+    onGround: false, standing: null,
+    facing: 1, crouch: false,
+    coyote: 0, buffer: 0, invuln: 0, sprung: false,
+    run: 0, squash: 0, scarf: []
+  };
+  for (let i = 0; i < 7; i++) p.scarf.push({ x: x + 14, y: y - 28 });
+  return p;
+}
+
+/* =====================================================================
+   2. CRIAÇÃO DAS PLATAFORMAS / 3. MOEDAS / OBSTÁCULOS  (carregamento da fase)
+   ===================================================================== */
+function loadLevel(i) {
+  level = LEVELS[i]; theme = level.theme;
+  plats = level.platforms.map(o => ({ ...o, state: 'idle', timer: 0, fy: 0, fade: 1, t: 0, dx: 0, dy: 0 }));
+  spikes = level.spikes.map(o => ({ ...o }));
+  springs = level.springs.map(o => ({ ...o, anim: 0 }));
+  cps = level.checkpoints.map(o => ({ ...o, on: false }));
+  // 3. Exatamente 3 moedas por fase
+  coins = level.coins.map(o => ({ ...o, got: false, ph: Math.random() * TAU }));
+  lastCp = { x: level.start.x, y: level.start.y };
+  pl = createPlayer(level.start.x, level.start.y);
+  particles = []; popups = [];
+  camX = clamp(pl.x - VW / 2, 0, level.width - VW);
+}
+
+/* =====================================================================
+   6. CRONÔMETRO  /  início e reinício de fase
+   ===================================================================== */
+function startLevel() {
+  loadLevel(levelIndex);
+  timeLeft = TOTAL_TIME; coinsGot = 0;
+  state = 'ready'; paused = false; readyT = 1.6;
+  showScreen(null);
+  $('hud').hidden = false; $('timebar').hidden = false;
+  sfx.start();
+  updateHud(true);
+}
+function startGame() {
+  levelIndex = 0; levelScores = [null, null, null];
+  startLevel();
+}
+
+/* =====================================================================
+   7. SISTEMA DE PONTUAÇÃO
+   Até "par" segundos gastos = 30 pts; depois cai linearmente até 1 pt em 30s.
+   ===================================================================== */
+function scoreFor(tLeft) {
+  const elapsed = TOTAL_TIME - tLeft;
+  if (elapsed <= level.par) return MAX_SCORE;
+  const k = (elapsed - level.par) / (TOTAL_TIME - level.par);
+  return clamp(Math.round(MAX_SCORE - k * (MAX_SCORE - 1)), 1, MAX_SCORE);
+}
+const totalScore = () => levelScores.reduce((a, s) => a + (s || 0), 0);
+
+/* =====================================================================
+   5. FÍSICA E COLISÕES
+   ===================================================================== */
+const solids = () => plats.filter(s => s.type !== 'crumble' || s.state !== 'fallen');
+
+function canStand() {
+  const r = { x: pl.x, y: pl.y - (PLAYER.h - pl.h), w: pl.w, h: PLAYER.h };
+  return !solids().some(s => ov(r, s));
+}
+function setCrouch(on) {
+  if (on && !pl.crouch) { pl.y += pl.h - PLAYER.hCrouch; pl.h = PLAYER.hCrouch; pl.crouch = true; }
+  else if (!on && pl.crouch && canStand()) { pl.y -= PLAYER.h - pl.h; pl.h = PLAYER.h; pl.crouch = false; }
+}
+
+function resolveX() {
+  for (const s of solids()) {
+    if (ov(pl, s)) {
+      pl.x = (pl.x + pl.w / 2 < s.x + s.w / 2) ? s.x - pl.w : s.x + s.w;
+      pl.vx = 0;
+    }
+  }
+}
+function resolveY() {
+  const impact = pl.vy;
+  pl.onGround = false; pl.standing = null;
+  for (const s of solids()) {
+    if (ov(pl, s)) {
+      if (pl.y + pl.h / 2 < s.y + s.h / 2) {          // pousou por cima
+        pl.y = s.y - pl.h;
+        if (pl.vy > 0) pl.vy = 0;
+        pl.onGround = true; pl.standing = s;
+        if (impact > 380) { pl.squash = 0.2; burst(pl.x + pl.w / 2, pl.y + pl.h, 6, [255, 255, 255], 90, .35, 200); }
+        if (s.type === 'crumble' && s.state === 'idle') { s.state = 'shaking'; s.timer = 0.5; }
+      } else {                                         // bateu a cabeça
+        pl.y = s.y + s.h;
+        if (pl.vy < 0) pl.vy = 0;
+      }
+    }
+  }
+}
+
+function crumbleTick(s, dt) {
+  if (s.state === 'shaking') { s.timer -= dt; if (s.timer <= 0) { s.state = 'fallen'; s.timer = 2.6; s.fy = 0; } }
+  else if (s.state === 'fallen') { s.fy += 380 * dt; s.timer -= dt; if (s.timer <= 0) { s.state = 'idle'; s.fade = 0; s.fy = 0; } }
+  else if (s.fade < 1) s.fade = Math.min(1, s.fade + dt * 3);
+}
+
+// Um passo de física (chamado várias vezes por quadro para ficar estável)
+function step(dt, input) {
+  // plataformas móveis e que esfarelam
+  for (const s of plats) {
+    if (s.type === 'mover') {
+      s.t += dt;
+      const f = 0.5 - 0.5 * Math.cos(TAU * s.t / s.period);
+      const nx = s.ax + (s.bx - s.ax) * f, ny = s.ay + (s.by - s.ay) * f;
+      s.dx = nx - s.x; s.dy = ny - s.y; s.x = nx; s.y = ny;
+      if (pl.standing === s) { pl.x += s.dx; pl.y += s.dy; }     // leva o jogador junto
+    } else if (s.type === 'crumble') crumbleTick(s, dt);
+  }
+  for (const sp of springs) if (sp.anim > 0) sp.anim -= dt;
+  if (pl.invuln > 0) pl.invuln -= dt;
+
+  const L = input && keys.left, R = input && keys.right, D = input && keys.down, J = input && keys.jump;
+
+  // abaixar (S)
+  setCrouch(D);
+
+  // movimento horizontal com aceleração e atrito
+  const want = (R ? 1 : 0) - (L ? 1 : 0);
+  const max = (pl.crouch && pl.onGround) ? PHYS.crouchRun : PHYS.run;
+  const acc = pl.onGround ? PHYS.groundAcc : PHYS.airAcc;
+  if (want) {
+    pl.vx += want * (pl.vx * want < 0 ? acc + PHYS.groundFric : acc) * dt;
+    pl.vx = clamp(pl.vx, -max, max);
+    pl.facing = want;
+  } else {
+    const f = (pl.onGround ? PHYS.groundFric : PHYS.airFric) * dt;
+    pl.vx = Math.abs(pl.vx) <= f ? 0 : pl.vx - Math.sign(pl.vx) * f;
+  }
+
+  // pulo com "coyote time" e "jump buffer"
+  pl.coyote = pl.onGround ? PHYS.coyote : pl.coyote - dt;
+  if (input) pl.buffer = Math.max(0, pl.buffer - dt);
+  if (pl.buffer > 0 && pl.coyote > 0) {
+    pl.vy = PHYS.jump; pl.buffer = 0; pl.coyote = 0; pl.onGround = false; pl.standing = null; pl.sprung = false;
+    pl.squash = -0.18; sfx.jump();
+    burst(pl.x + pl.w / 2, pl.y + pl.h, 5, [255, 255, 255], 80, .3, 200);
+  }
+
+  // gravidade (pulo variável: soltar W corta o pulo)
+  let g = PHYS.gravity;
+  if (pl.vy > 0) { g *= PHYS.fallMul; pl.sprung = false; if (D && !pl.onGround) g *= 1.5; }
+  else if (!J && !pl.sprung) g *= PHYS.cutMul;
+  pl.vy = Math.min(pl.vy + g * dt, PHYS.maxFall);
+
+  // move e resolve colisões eixo a eixo
+  pl.x += pl.vx * dt; resolveX();
+  pl.y += pl.vy * dt; resolveY();
+
+  // limites do mapa
+  if (pl.x < 0) { pl.x = 0; pl.vx = 0; }
+  if (pl.x + pl.w > level.width) { pl.x = level.width - pl.w; pl.vx = 0; }
+  if (pl.y < -200) { pl.y = -200; pl.vy = 0; }
+
+  // molas
+  for (const sp of springs) {
+    const r = { x: sp.x, y: sp.y - 14, w: sp.w, h: 14 };
+    if (pl.vy >= 0 && ov(pl, r, 0)) {
+      pl.vy = PHYS.spring; pl.sprung = true; pl.onGround = false; pl.standing = null; pl.coyote = 0;
+      sp.anim = 0.25; pl.squash = -0.22; sfx.spring();
+      burst(sp.x + sp.w / 2, sp.y - 10, 8, [255, 90, 90], 160, .4, 300);
+    }
+  }
+}
+
+function physics(dt, input) {
+  const n = Math.max(1, Math.ceil(dt / (1 / 120)));
+  for (let i = 0; i < n; i++) step(dt / n, input);
+}
+
+// Coisas verificadas uma vez por quadro: moedas, espinhos, buracos, checkpoints
+function afterPhysics() {
+  // moedas
+  for (const c of coins) {
+    if (c.got) continue;
+    const nx = clamp(c.x, pl.x, pl.x + pl.w), ny = clamp(c.y, pl.y, pl.y + pl.h);
+    if (Math.hypot(c.x - nx, c.y - ny) < 17) {
+      c.got = true; coinsGot++;
+      sfx.coin();
+      burst(c.x, c.y, 14, [255, 205, 40], 220, .6, 400);
+      popup(c.x, c.y - 18, '+1', '#FFC400');
+    }
+  }
+  // checkpoints
+  for (const cp of cps) {
+    if (!cp.on && Math.abs(pl.x + pl.w / 2 - cp.x) < 26 && Math.abs(pl.y + pl.h - cp.y) < 70) {
+      cp.on = true; lastCp = { x: cp.x, y: cp.y };
+      sfx.check(); popup(cp.x, cp.y - 64, 'Ponto salvo', '#34B36B');
+    }
+  }
+  // espinhos
+  if (pl.invuln <= 0) {
+    const hb = { x: pl.x + 4, y: pl.y + 4, w: pl.w - 8, h: pl.h - 6 };
+    for (const s of spikes) {
+      if (ov(hb, { x: s.x + 4, y: s.y - 14, w: s.w - 8, h: 14 }, 0)) { die('espinho'); break; }
+    }
+  }
+  // buraco
+  if (pl.y > VH + 60) die('buraco');
+}
+
+// Cair/espetar: volta ao último ponto seguro e perde segundos
+function die() {
+  if (state !== 'playing') return;
+  timeLeft -= DEATH_PENALTY;
+  sfx.hurt();
+  burst(pl.x + pl.w / 2, Math.min(pl.y + pl.h / 2, VH - 20), 14, [255, 90, 90], 220, .6, 500);
+  popup(lastCp.x, lastCp.y - 70, '-' + DEATH_PENALTY + 's', '#E5383B');
+  pl = createPlayer(lastCp.x, lastCp.y);
+  pl.invuln = 0.9;
+}
+
+/* =====================================================================
+   PARTÍCULAS E TEXTOS FLUTUANTES
+   ===================================================================== */
+function burst(x, y, n, col, spd = 150, life = .5, grav = 500) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * TAU, s = spd * (.3 + Math.random() * .7);
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - spd * .3, life, max: life, size: 3 + Math.random() * 3, col, grav });
+  }
+}
+function popup(x, y, text, color) { popups.push({ x, y, text, color, life: 1.1 }); }
+
+/* =====================================================================
+   LOOP PRINCIPAL (atualização)
+   ===================================================================== */
+function update(dt) {
+  clock += dt;
+  for (const p of particles) { p.life -= dt; p.vy += p.grav * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+  particles = particles.filter(p => p.life > 0);
+  for (const p of popups) { p.life -= dt; p.y -= 38 * dt; }
+  popups = popups.filter(p => p.life > 0);
+
+  if (state === 'menu') { camX = (level.width - VW) * (0.5 - 0.5 * Math.cos(clock * 0.12)); return; }
+  if (paused) return;
+
+  if (state === 'ready') {
+    physics(dt, false);
+    readyT -= dt;
+    if (readyT <= 0) { state = 'playing'; pl.buffer = 0; }
+  } else if (state === 'playing') {
+    // 6. Cronômetro: diminui continuamente
+    timeLeft -= dt;
+    physics(dt, true);
+    afterPhysics();
+    if (coinsGot >= 3 && state === 'playing') { winLevel(); }
+    else if (timeLeft <= 0 && state === 'playing') { loseLevel(); }
+  } else if (state === 'won' || state === 'lost') {
+    physics(dt, false);
+    endT -= dt;
+    if (endT <= 0) { state === 'won' ? showWin() : showLose(); }
+  } else if (state === 'final' || state === 'won-ui' || state === 'lost-ui') {
+    physics(dt, false);
+  }
+
+  // sombras e animações do personagem
+  pl.squash *= Math.exp(-dt * 12);
+  pl.run += Math.abs(pl.vx) * dt * 0.06;
+  if (pl.onGround && Math.abs(pl.vx) > 200) { dustT -= dt; if (dustT <= 0) { dustT = .12; burst(pl.x + pl.w / 2 - pl.facing * 8, pl.y + pl.h, 1, [255, 255, 255], 40, .3, 100); } }
+  // cachecol que balança
+  const nx = pl.x + pl.w / 2 - pl.facing * 8, ny = pl.y + (pl.crouch ? 8 : 12);
+  pl.scarf[0] = { x: nx, y: ny };
+  const k = Math.min(1, dt * 22);
+  for (let i = 1; i < pl.scarf.length; i++) {
+    const a = pl.scarf[i - 1], b = pl.scarf[i];
+    b.x += (a.x - pl.facing * 6 - pl.vx * 0.012 - b.x) * k;
+    b.y += (a.y + 2 - pl.vy * 0.01 - b.y) * k;
+  }
+  // câmera suave acompanhando o jogador
+  const target = clamp(pl.x + pl.w / 2 - VW / 2 + pl.facing * 70, 0, level.width - VW);
+  camX += (target - camX) * (1 - Math.exp(-dt * 7));
+  updateHud(false);
+}
+
+/* =====================================================================
+   9. TELA DE VITÓRIA  /  10. TELA DE DERROTA
+   ===================================================================== */
+function winLevel() {
+  state = 'won'; endT = 0.9;
+  lastScore = scoreFor(timeLeft);
+  levelScores[levelIndex] = lastScore;
+  sfx.win();
+  burst(pl.x + pl.w / 2, pl.y, 40, [255, 205, 40], 320, 1.1, 500);
+  burst(pl.x + pl.w / 2, pl.y, 24, [95, 203, 132], 300, 1.1, 500);
+  updateHud(true);
+}
+function showWin() {
+  state = 'won-ui';
+  const last = levelIndex === LEVELS.length - 1;
+  $('winLevelName').textContent = 'Fase ' + (levelIndex + 1) + ' · ' + level.name;
+  $('winTime').textContent = timeLeft.toFixed(1) + 's';
+  $('winCoins').textContent = '3/3';
+  $('winScore').textContent = lastScore;
+  $('winMeter').style.width = '0%';
+  requestAnimationFrame(() => requestAnimationFrame(() => { $('winMeter').style.width = (lastScore / MAX_SCORE * 100) + '%'; }));
+  const need = (TOTAL_TIME - level.par);
+  $('winNote').textContent = lastScore >= MAX_SCORE ? 'Pontuação máxima! Perfeito.' : 'Para fazer 30 pontos, termine com ' + need + 's ou mais sobrando.';
+  $('btnNext').textContent = last ? 'VER RESULTADO' : 'PRÓXIMA FASE';
+  showScreen('win'); $('btnNext').focus({ preventScroll: true });
+  $('hud').hidden = true; $('timebar').hidden = true;
+}
+function loseLevel() {
+  state = 'lost'; endT = 0.7; timeLeft = 0;
+  sfx.lose(); updateHud(true);
+}
+function showLose() {
+  state = 'lost-ui';
+  $('loseCoins').textContent = coinsGot + '/3';
+  $('loseHint').textContent = coinsGot === 0 ? 'Nenhuma moeda desta vez. Você consegue!' : 'Faltaram ' + (3 - coinsGot) + (3 - coinsGot === 1 ? ' moeda.' : ' moedas.');
+  showScreen('lose'); $('btnRetry').focus({ preventScroll: true });
+  $('hud').hidden = true; $('timebar').hidden = true;
+}
+function showFinal() {
+  state = 'final';
+  const rows = LEVELS.map((l, i) => '<div><dt>Fase ' + (i + 1) + ' · ' + l.name + '</dt><dd>' + (levelScores[i] || 0) + '</dd></div>').join('') +
+    '<div class="big"><dt>Pontuação total</dt><dd>' + totalScore() + ' / ' + (MAX_SCORE * LEVELS.length) + '</dd></div>';
+  $('finalStats').innerHTML = rows;
+  showScreen('final'); $('btnAgain').focus({ preventScroll: true });
+}
+
+/* =====================================================================
+   INTERFACE (HUD em HTML) e controle de telas
+   ===================================================================== */
+const hudCache = {};
+function setText(id, txt) { if (hudCache[id] !== txt) { hudCache[id] = txt; $(id).textContent = txt; } }
+function updateHud(force) {
+  if (force) for (const k in hudCache) delete hudCache[k];
+  const t = Math.max(0, Math.ceil(timeLeft));
+  setText('hudLevel', 'Fase ' + (levelIndex + 1));
+  setText('hudTime', 'Tempo: ' + t + 's');
+  setText('hudCoins', 'Moedas: ' + coinsGot + '/3');
+  setText('hudScore', 'Pontuação: ' + totalScore());
+  setText('hudWorth', 'Esta fase vale ' + (timeLeft > 0 ? scoreFor(timeLeft) : 0) + ' pts');
+  const tp = $('hudTime'), bar = $('timebar');
+  tp.classList.toggle('warn', timeLeft <= 10 && timeLeft > 5);
+  tp.classList.toggle('danger', timeLeft <= 5);
+  bar.classList.toggle('warn', timeLeft <= 10 && timeLeft > 5);
+  bar.classList.toggle('danger', timeLeft <= 5);
+  bar.style.transform = 'scaleX(' + clamp(timeLeft / TOTAL_TIME, 0, 1) + ')';
+  document.querySelectorAll('#hudCoinsPill .dot').forEach((d, i) => d.classList.toggle('on', i < coinsGot));
+}
+function showScreen(name) {
+  for (const id of ['start', 'win', 'lose', 'final', 'pause']) $('screen-' + id).hidden = (id !== name);
+}
+
+$('btnPlay').addEventListener('click', startGame);
+$('btnRetry').addEventListener('click', startLevel);
+$('btnAgain').addEventListener('click', startGame);
+$('btnResume').addEventListener('click', togglePause);
+$('btnMute').addEventListener('click', toggleMute);
+$('btnNext').addEventListener('click', () => {
+  if (levelIndex < LEVELS.length - 1) { levelIndex++; startLevel(); }
+  else showFinal();
+});
+
+/* =====================================================================
+   DESENHO (p5.js)
+   ===================================================================== */
+const STARS = Array.from({ length: 80 }, (_, i) => ({ x: (i * 197) % VW, y: (i * 89) % 330, s: 1 + (i % 3) * .6, ph: i }));
+const CLOUDS = Array.from({ length: 7 }, (_, i) => ({ x: i * 260 + (i % 3) * 40, y: 50 + (i * 53) % 150, s: .8 + (i % 3) * .35 }));
+const FONT = "'Bricolage Grotesque', 'Figtree', system-ui, sans-serif";
+
+function drawBackground() {
+  const ctx = P.drawingContext;
+  const g = ctx.createLinearGradient(0, 0, 0, VH);
+  g.addColorStop(0, theme.skyTop); g.addColorStop(1, theme.skyBot);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+  P.noStroke();
+  if (theme.stars) {
+    for (const s of STARS) { P.fill(255, 255, 255, 120 + 100 * Math.sin(clock * 1.5 + s.ph)); P.circle(s.x, s.y, s.s * 2); }
+  }
+  // sol / lua
+  P.fill(theme.orb); P.circle(780 - camX * 0.03, 110, theme.stars ? 70 : 90);
+  if (theme.stars) { P.fill(theme.skyTop); P.circle(800 - camX * 0.03, 100, 60); }
+  // nuvens
+  P.fill(theme.cloud);
+  for (const c of CLOUDS) {
+    const span = VW + 400;
+    const x = (((c.x - camX * 0.22 + clock * 6) % span) + span) % span - 200;
+    P.ellipse(x, c.y, 90 * c.s, 30 * c.s); P.ellipse(x + 26 * c.s, c.y - 12 * c.s, 60 * c.s, 34 * c.s); P.ellipse(x - 28 * c.s, c.y - 6 * c.s, 50 * c.s, 26 * c.s);
+  }
+  hills(theme.hill1, 360, 40, 0.006, 0.18, 0);
+  hills(theme.hill2, 410, 34, 0.009, 0.42, 2);
+}
+function hills(col, base, amp, freq, par, off) {
+  P.fill(col); P.noStroke(); P.beginShape();
+  for (let x = -20; x <= VW + 20; x += 16) {
+    const w = x + camX * par;
+    P.vertex(x, base + Math.sin(w * freq + off) * amp + Math.sin(w * freq * 2.3 + off) * amp * 0.4);
+  }
+  P.vertex(VW + 20, VH + 10); P.vertex(-20, VH + 10); P.endShape(P.CLOSE);
+}
+
+function drawPlat(s) {
+  P.noStroke();
+  if (s.type === 'solid') {
+    P.fill(theme.body); P.rect(s.x, s.y, s.w, s.h, 6);
+    P.fill(theme.bodyDark); P.rect(s.x, s.y + 9, s.w, 4);
+    if (s.h > 60) { P.fill(255, 255, 255, 14); for (let x = s.x + 20; x < s.x + s.w - 6; x += 44) P.rect(x, s.y + 24, 6, Math.min(s.h - 30, 60), 3); }
+    if (s.low) {
+      P.fill(255, 196, 0); P.rect(s.x, s.y + s.h - 8, s.w, 8);
+      P.fill('#1B2A41');
+      for (let x = s.x; x + 16 <= s.x + s.w; x += 20) P.quad(x, s.y + s.h, x + 8, s.y + s.h, x + 14, s.y + s.h - 8, x + 6, s.y + s.h - 8);
+    }
+    P.fill(theme.grass); P.rect(s.x, s.y, s.w, 9, 6, 6, 0, 0);
+    P.fill(255, 255, 255, 80); P.rect(s.x + 4, s.y + 2, s.w - 8, 2, 1);
+  } else if (s.type === 'crumble') {
+    let x = s.x, y = s.y, a = 255;
+    if (s.state === 'shaking') x += Math.sin(clock * 70) * 2;
+    if (s.state === 'fallen') { if (s.fy > 260) return; y += s.fy; a = 255 * (1 - s.fy / 260); }
+    else a = 255 * s.fade;
+    P.fill(227, 184, 103, a); P.rect(x, y, s.w, s.h, 5);
+    P.fill(246, 222, 158, a); P.rect(x, y, s.w, 6, 5, 5, 0, 0);
+    P.stroke(120, 80, 30, a * .6); P.strokeWeight(2); P.noFill();
+    P.line(x + s.w * .3, y + 6, x + s.w * .38, y + 12); P.line(x + s.w * .38, y + 12, x + s.w * .33, y + s.h);
+    P.line(x + s.w * .7, y + 6, x + s.w * .64, y + 13);
+    P.noStroke();
+  } else if (s.type === 'mover') {
+    P.fill(61, 185, 207); P.rect(s.x, s.y, s.w, s.h, 6);
+    P.fill(120, 220, 235); P.rect(s.x, s.y, s.w, 6, 6, 6, 0, 0);
+    P.fill(255, 255, 255, 220);
+    for (let i = 1; i <= 3; i++) P.circle(s.x + s.w * i / 4, s.y + 13, 4);
+  }
+}
+function drawRail(s) {
+  const ctx = P.drawingContext;
+  ctx.setLineDash([6, 9]);
+  P.stroke(255, 255, 255, 110); P.strokeWeight(2); P.noFill();
+  P.line(s.ax + s.w / 2, s.ay + s.h / 2, s.bx + s.w / 2, s.by + s.h / 2);
+  ctx.setLineDash([]);
+  P.noStroke();
+}
+function drawSpikes(s) {
+  const n = Math.max(1, Math.round(s.w / 10)), w = s.w / n;
+  P.noStroke();
+  for (let i = 0; i < n; i++) {
+    P.fill('#E5383B'); P.triangle(s.x + i * w, s.y, s.x + i * w + w / 2, s.y - 18, s.x + (i + 1) * w, s.y);
+    P.fill(255, 255, 255, 70); P.triangle(s.x + i * w + w / 2, s.y - 18, s.x + i * w + w / 2 + 1.5, s.y - 12, s.x + i * w + w / 2 - 3, s.y - 8);
+  }
+}
+function drawSpring(sp) {
+  const k = sp.anim > 0 ? 0.45 : 1, ch = 12 * k;
+  P.noStroke(); P.fill('#1B2A41'); P.rect(sp.x + 4, sp.y - 4, sp.w - 8, 4, 2);
+  P.stroke('#C9D3E3'); P.strokeWeight(3); P.noFill();
+  const top = sp.y - 4 - ch, zs = 5;
+  P.beginShape();
+  for (let i = 0; i <= zs; i++) P.vertex(sp.x + (i % 2 ? sp.w - 10 : 10), sp.y - 4 - ch * i / zs);
+  P.endShape();
+  P.noStroke(); P.fill('#E5383B'); P.rect(sp.x, top - 6, sp.w, 7, 3);
+}
+function drawCheckpoint(cp) {
+  P.stroke('#C9D3E3'); P.strokeWeight(3); P.line(cp.x, cp.y, cp.x, cp.y - 52);
+  P.noStroke(); P.fill(cp.on ? '#34B36B' : '#9AA7BD');
+  const w = Math.sin(clock * 5) * 3;
+  P.triangle(cp.x + 1, cp.y - 52, cp.x + 24 + w, cp.y - 44, cp.x + 1, cp.y - 34);
+}
+function drawCoin(c) {
+  if (c.got) return;
+  const y = c.y + Math.sin(clock * 3 + c.ph) * 4;
+  const sx = Math.abs(Math.cos(clock * 2.6 + c.ph));
+  P.noStroke(); P.fill(255, 196, 0, 50); P.circle(c.x, y, 40);
+  P.stroke('#8A6A00'); P.strokeWeight(2.5); P.fill('#FFC400'); P.ellipse(c.x, y, Math.max(4, 26 * sx), 26);
+  P.noStroke(); P.fill('#FFE680'); P.ellipse(c.x - 2 * sx, y - 3, Math.max(2, 10 * sx), 10);
+  if (sx > .45) { P.fill('#C99700'); P.rect(c.x - 2, y - 6, 4, 12, 2); }
+}
+function drawPlayer() {
+  const c = pl;
+  if (c.invuln > 0 && Math.floor(clock * 20) % 2 === 0) return;
+  // cachecol
+  P.noFill(); P.stroke('#FF4D8D'); P.strokeCap(P.ROUND);
+  for (let i = 0; i < c.scarf.length - 1; i++) {
+    P.strokeWeight(Math.max(2, 8 - i * 1.1));
+    P.line(c.scarf[i].x, c.scarf[i].y, c.scarf[i + 1].x, c.scarf[i + 1].y);
+  }
+  P.noStroke();
+  P.push();
+  P.translate(c.x + c.w / 2, c.y + c.h);
+  const sq = clamp(c.squash, -.25, .25);
+  P.scale(1 + sq, 1 - sq);
+  const sw = (c.onGround && Math.abs(c.vx) > 20) ? Math.sin(c.run) * 5 : 0;
+  P.fill('#1B2A41'); P.rect(-10 + sw, -8, 8, 8, 2); P.rect(2 - sw, -8, 8, 8, 2);
+  P.fill('#FF8A1F'); P.rect(-c.w / 2, -c.h, c.w, c.h - 6, 9);
+  P.fill('#E56F0B'); P.rect(-c.w / 2, -14, c.w, 8, 0, 0, 9, 9);
+  const vy = -c.h + (c.crouch ? 5 : 8), f = c.facing;
+  P.fill('#1B2A41'); P.rect(-9 + f * 4, vy, 18, 11, 5);
+  P.fill(255); P.circle(-3 + f * 6, vy + 5.5, 4.5); P.circle(4 + f * 6, vy + 5.5, 4.5);
+  P.pop();
+}
+function drawSign(s) {
+  P.textFont(FONT); P.textStyle(P.BOLD); P.textSize(13); P.textAlign(P.CENTER, P.CENTER);
+  const w = P.textWidth(s.text) + 18;
+  P.noStroke(); P.fill(255, 255, 255, 215); P.rect(s.x - w / 2, s.y - 12, w, 24, 8);
+  P.fill('#1B2A41'); P.text(s.text, s.x, s.y + 1);
+}
+
+function drawWorld() {
+  for (const s of level.signs) drawSign(s);
+  for (const s of plats) if (s.type === 'mover') drawRail(s);
+  for (const s of plats) drawPlat(s);
+  for (const cp of cps) drawCheckpoint(cp);
+  for (const sp of springs) drawSpring(sp);
+  for (const s of spikes) drawSpikes(s);
+  for (const c of coins) drawCoin(c);
+  drawPlayer();
+  P.noStroke();
+  for (const p of particles) { P.fill(p.col[0], p.col[1], p.col[2], 255 * p.life / p.max); P.rect(p.x, p.y, p.size, p.size, 1); }
+  P.textFont(FONT); P.textStyle(P.BOLD); P.textSize(20); P.textAlign(P.CENTER, P.CENTER);
+  for (const p of popups) {
+    const col = P.color(p.color); col.setAlpha(255 * Math.min(1, p.life * 2));
+    P.stroke(27, 42, 65, 200 * Math.min(1, p.life * 2)); P.strokeWeight(4); P.fill(col);
+    P.text(p.text, p.x, p.y);
+  }
+  P.noStroke();
+}
+
+// Setas para moedas que estão fora da tela
+function drawCoinHints() {
+  P.noStroke();
+  for (const c of coins) {
+    if (c.got) continue;
+    const sx = c.x - camX;
+    if (sx >= -8 && sx <= VW + 8) continue;
+    const left = sx < 0, x = left ? 24 : VW - 24, y = clamp(c.y, 120, VH - 40);
+    P.fill(19, 35, 58, 170); P.rect(x - 18, y - 16, 36, 32, 10);
+    P.fill('#FFC400'); P.circle(x + (left ? 4 : -4), y, 14);
+    P.fill(255); const d = left ? -1 : 1;
+    P.triangle(x + d * 12, y, x + d * 5, y - 5, x + d * 5, y + 5);
+  }
+}
+
+function drawReadyBanner() {
+  const a = clamp(readyT / 0.3, 0, 1);
+  P.noStroke(); P.fill(14, 30, 52, 110 * a); P.rect(0, VH / 2 - 78, VW, 150);
+  P.textAlign(P.CENTER, P.CENTER); P.textFont(FONT); P.textStyle(P.BOLD);
+  P.fill(255, 255, 255, 255 * a); P.textSize(60); P.text('FASE ' + (levelIndex + 1), VW / 2, VH / 2 - 30);
+  P.textSize(22); P.fill(255, 196, 0, 255 * a); P.text(level.name, VW / 2, VH / 2 + 14);
+  P.textSize(16); P.fill(255, 255, 255, 220 * a); P.text('Pegue 3 moedas em 30 segundos', VW / 2, VH / 2 + 46);
+}
+
+function render() {
+  drawBackground();
+  P.push(); P.translate(-Math.round(camX), 0);
+  drawWorld();
+  P.pop();
+  if (inGame() || state === 'won' || state === 'lost') drawCoinHints();
+  if (state === 'ready' && !paused) drawReadyBanner();
+}
+
+/* =====================================================================
+   INICIALIZAÇÃO DO p5.js
+   ===================================================================== */
+new p5(p => {
+  P = p;
+  p.setup = () => {
+    p.pixelDensity(Math.min(2, window.devicePixelRatio || 1));
+    const c = p.createCanvas(VW, VH);
+    c.parent('canvasHost');
+    p.frameRate(60);
+    loadLevel(0);          // fase 1 aparece ao fundo da tela inicial
+    $('btnPlay').focus({ preventScroll: true });
+  };
+  p.draw = () => {
+    const dt = Math.min(p.deltaTime / 1000, 0.05);
+    update(dt);
+    render();
+  };
+}, document.body);
+})();
+</script>
+</body>
+</html>
